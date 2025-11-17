@@ -7,6 +7,7 @@ import upr.famnit.components.*;
 import upr.famnit.util.Logger;
 import upr.famnit.util.StreamUtil;
 
+import javax.crypto.spec.PSource;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -304,11 +305,6 @@ public class Worker extends Thread {
         }
 
         data.setVerificationStatus(VerificationStatus.Working);
-//        if (request.getProtocol().equals("HIVE")) {
-//            connection.send(clientRequest.getRequest());
-//        } else {
-//
-//        }
         connection.proxyRequestToNode(clientRequest);
         Logger.success("Request handled by: " + data.getNodeName() +
                 "\nRequest time in queue: " + String.format("%,d", clientRequest.queTime()) + " ms" +
@@ -372,11 +368,13 @@ public class Worker extends Thread {
     private ClientRequest sequencedPolling(Request request) {
         String tagsString = data.getTags();
         if (tagsString == null || tagsString.isBlank()) {
+            Logger.error("Missing tags for sequenced polling");
             return null;
         }
 
         String[] tags = tagsString.split(";");
         if (tags.length == 0) {
+            Logger.error("Missing tags for sequenced polling");
             return null;
         }
 
@@ -385,21 +383,26 @@ public class Worker extends Thread {
             return task;
         }
 
-        for (int i = 0; i < tags.length; i++) {
-            ClientRequest clientRequest = RequestQue.getModelTask(tags[i], data.getNodeName());
+        ClientRequest clientRequest = null;
+        int tagIndex = 0;
+        for (tagIndex = 0; tagIndex < tags.length; tagIndex++) {
+            clientRequest = RequestQue.getModelTask(tags[tagIndex], data.getNodeName());
             if (clientRequest != null) {
-                // Rotate the tags array to prioritize the model just used
-                if (i > 0) {
-                    String[] newTags = new String[tags.length];
-                    for (int j = 0; j < tags.length; j++) {
-                        newTags[(j - i + tags.length) % tags.length] = tags[j];
-                    }
-                    data.tagsTestAndSet(String.join(";", newTags));
-                }
-                return clientRequest;
+                break;
             }
         }
-        return null;
+
+        // if task is not for first model
+        // shift the working model as first model
+        if (tagIndex > 0) {
+            String[] newTags = new String[tags.length];
+            for (int i = 0; i < tags.length; i++) {
+                newTags[i] = tags[(i + tagIndex) % tags.length];
+            }
+            data.tagsTestAndSet(String.join(";", newTags));
+        }
+
+        return clientRequest;
     }
 
     /**

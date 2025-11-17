@@ -250,6 +250,7 @@ public class Overseer extends Thread {
                     !existingNodeNonce.equals(nodeNonce)
             ) {
                 node.getData().setVerificationStatus(VerificationStatus.Rejected);
+                Logger.warn("Rejecting authentication of " + nodeName + " since key is in use by another connection with different nonce.") ;
                 return NodeStatus.InvalidNonce;
             }
         }
